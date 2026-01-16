@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using System.Threading;
 using TinkState.Internal;
 
+// this is an intentionally undocumented/temporary way for third-party assemblies to access our internals,
+// mostly provided so I can experiment with UI Toolkit integration without changing the library for now
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("TinkState.InternalAccess")]
+
 namespace TinkState
 {
 	/// <summary>
