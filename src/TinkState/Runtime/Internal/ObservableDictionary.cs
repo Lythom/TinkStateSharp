@@ -8,9 +8,23 @@ namespace TinkState.Internal
 		readonly Dictionary<TKey, TValue> entries;
 		bool valid;
 
+		public string Name;
+		internal string callerFile;
+		internal int callerLine;
+
 		public ObservableDictionary()
 		{
 			entries = new Dictionary<TKey, TValue>();
+		}
+
+		public string DebugName
+		{
+			get
+			{
+				if (Name != null) return Name;
+				if (callerFile == null) return "ObservableDictionary<" + typeof(TKey).Name + "," + typeof(TValue).Name + ">";
+				return System.IO.Path.GetFileNameWithoutExtension(callerFile) + ":" + callerLine;
+			}
 		}
 
 		public TValue this[TKey key]

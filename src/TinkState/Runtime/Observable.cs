@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using TinkState.Internal;
 
@@ -72,6 +73,17 @@ namespace TinkState
 	public static class Observable
 	{
 		/// <summary>
+		/// Quand vrai, AutoObservable.GetCurrentValue collecte toutes les subscriptions
+		/// changées dans LastTriggerSources (perd l'early-break, alloue un buffer la
+		/// première fois). Activé en éditeur uniquement par défaut.
+		/// </summary>
+		public static bool DebugTrackTriggers =
+#if UNITY_EDITOR
+			true;
+#else
+			false;
+#endif
+		/// <summary>
 		/// Create a lightweight constant observable holding a value that never changes.
 		/// </summary>
 		/// <typeparam name="T">Type of the value being hold by this observable.</typeparam>
@@ -98,9 +110,35 @@ namespace TinkState
 		///     <para>Used for triggering bindings and propagating changes to further auto-observables.</para>
 		/// </param>
 		/// <returns>Auto-observable providing computed values.</returns>
-		public static Observable<T> Auto<T>(Func<T> compute, IEqualityComparer<T> comparer = null)
+		public static Observable<T> Auto<T>(
+			Func<T> compute,
+			IEqualityComparer<T> comparer = null,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
-			return new AutoObservable<T>(new SyncComputation<T>(compute), comparer);
+			var o = new AutoObservable<T>(new SyncComputation<T>(compute), comparer);
+			o.callerFile = callerFile;
+			o.callerLine = callerLine;
+			return o;
+		}
+
+		/// <summary>
+		/// Same as <see cref="Auto{T}(System.Func{T},System.Collections.Generic.IEqualityComparer{T})"/> but with an
+		/// optional human-readable <paramref name="name"/>, used by debugger displays and
+		/// <see cref="AutoObservable{T}.LastTriggerSource"/> output.
+		/// </summary>
+		public static Observable<T> Auto<T>(
+			string name,
+			Func<T> compute,
+			IEqualityComparer<T> comparer = null,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
+		{
+			var o = new AutoObservable<T>(new SyncComputation<T>(compute), comparer);
+			o.Name = name;
+			o.callerFile = callerFile;
+			o.callerLine = callerLine;
+			return o;
 		}
 
 		/// <summary>
@@ -120,10 +158,15 @@ namespace TinkState
 		/// <param name="compute">Computation function that asynchronously returns a new value for this observable.</param>
 		/// <typeparam name="T">Type of the value being managed by this observable.</typeparam>
 		/// <returns>Auto-observable providing current results of value computation.</returns>
-		public static Observable<AsyncComputeResult<T>> Auto<T>(Func<AsyncComputeTask<T>> compute)
+		public static Observable<AsyncComputeResult<T>> Auto<T>(
+			Func<AsyncComputeTask<T>> compute,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
 			var computation = new AsyncComputation<T>(compute);
 			var observable = new AutoObservable<AsyncComputeResult<T>>(computation, null);
+			observable.callerFile = callerFile;
+			observable.callerLine = callerLine;
 			computation.Init(observable);
 			return observable;
 		}
@@ -140,11 +183,16 @@ namespace TinkState
 		/// <param name="compute">Cancelable computation function that asynchronously returns a new value for this observable.</param>
 		/// <typeparam name="T">Type of the value being managed by this observable.</typeparam>
 		/// <returns>Auto-observable providing current results of value computation.</returns>
-		public static Observable<AsyncComputeResult<T>> Auto<T>(Func<CancellationToken, AsyncComputeTask<T>> compute)
+		public static Observable<AsyncComputeResult<T>> Auto<T>(
+			Func<CancellationToken, AsyncComputeTask<T>> compute,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
 			// TODO: some flag for also cancelling task when last binding is disposed?
 			var computation = new AsyncCancelableComputation<T>(compute);
 			var observable = new AutoObservable<AsyncComputeResult<T>>(computation, null);
+			observable.callerFile = callerFile;
+			observable.callerLine = callerLine;
 			computation.Init(observable);
 			return observable;
 		}
@@ -157,16 +205,35 @@ namespace TinkState
 		/// <param name="action">Action to be invoked immediately as well as when any of the tracked value changes.</param>
 		/// <param name="scheduler">Custom scheduler that will manage invoking the action.</param>
 		/// <returns>Disposable reference to the binding for cancelling further re-invocations.</returns>
-		public static IDisposable AutoRun(Action action, Scheduler scheduler = null)
+		public static IDisposable AutoRun(
+			Action action,
+			Scheduler scheduler = null,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
+		{
+			return AutoRun(null, action, scheduler, callerFile, callerLine);
+		}
+
+		/// <summary>
+		/// Same as <see cref="AutoRun(System.Action,TinkState.Scheduler)"/> but with an optional human-readable
+		/// <paramref name="name"/>, useful for debugging — appears in the underlying auto-observable's
+		/// <c>[DebuggerDisplay]</c> and helps identify the run inside <c>AutoObservable.Current</c> while stepping.
+		/// </summary>
+		public static IDisposable AutoRun(
+			string name,
+			Action action,
+			Scheduler scheduler = null,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
 			// TODO: a smarter implementation? support for cancellation from within action? async auto-runs?
 			long counter = 0;
-			var observable = Auto(() =>
+			var observable = Auto(name, () =>
 			{
 				counter++;
 				action();
 				return counter;
-			});
+			}, null, callerFile, callerLine);
 			return observable.Bind(_ => { }, null, scheduler);
 		}
 
@@ -178,19 +245,51 @@ namespace TinkState
 		///     <para>Custom comparer that will be used to determine if the value has changed.</para>
 		///     <para>Used for triggering bindings and propagating changes to auto-observables.</para>
 		/// </param>
-		public static State<T> State<T>(T initialValue, IEqualityComparer<T> comparer = null)
+		public static State<T> State<T>(
+			T initialValue,
+			IEqualityComparer<T> comparer = null,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
-			return new Internal.State<T>(initialValue, comparer);
+			var s = new Internal.State<T>(initialValue, comparer);
+			s.callerFile = callerFile;
+			s.callerLine = callerLine;
+			return s;
 		}
+
+		/// <summary>
+		/// Same as <see cref="State{T}(T,System.Collections.Generic.IEqualityComparer{T})"/> but with an optional
+		/// human-readable <paramref name="name"/>, used by debugger displays so the state can be identified
+		/// when it appears as <c>LastTriggerSource</c> of an auto-observable.
+		/// </summary>
+		public static State<T> State<T>(T initialValue, string name, IEqualityComparer<T> comparer = null)
+		{
+			return new Internal.State<T>(initialValue, comparer) { Name = name };
+		}
+
+		/// <summary>
+		/// Debug helper: the auto-observable currently being computed, or <c>null</c> if no compute is in progress.
+		/// </summary>
+		/// <remarks>
+		/// While stepping into the body of an <c>Observable.Auto</c> / <c>Observable.AutoRun</c>, evaluating this
+		/// from a debugger watch window gives access to <c>LastTriggerSource</c> — the source observable
+		/// whose change caused the current recompute.
+		/// </remarks>
+		public static object CurrentAuto => Internal.AutoObservable.Current;
 
 		/// <summary>
 		/// Create an empty observable list.
 		/// </summary>
 		/// <typeparam name="T">The type of elements in the list.</typeparam>
 		/// <returns>New observable list instance.</returns>
-		public static ObservableList<T> List<T>()
+		public static ObservableList<T> List<T>(
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
-			return new Internal.ObservableList<T>();
+			var l = new Internal.ObservableList<T>();
+			l.callerFile = callerFile;
+			l.callerLine = callerLine;
+			return l;
 		}
 
 		/// <summary>
@@ -198,9 +297,15 @@ namespace TinkState
 		/// </summary>
 		/// <typeparam name="T">The type of elements in the list.</typeparam>
 		/// <returns>New observable list instance.</returns>
-		public static ObservableList<T> List<T>(IEnumerable<T> initial)
+		public static ObservableList<T> List<T>(
+			IEnumerable<T> initial,
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
-			return new Internal.ObservableList<T>(initial);
+			var l = new Internal.ObservableList<T>(initial);
+			l.callerFile = callerFile;
+			l.callerLine = callerLine;
+			return l;
 		}
 
 		/// <summary>
@@ -209,9 +314,14 @@ namespace TinkState
 		/// <typeparam name="TKey">The type of keys in the dictionary.</typeparam>
 		/// <typeparam name="TValue">The type of values in the dictionary.</typeparam>
 		/// <returns>New observable dictionary instance.</returns>
-		public static ObservableDictionary<TKey, TValue> Dictionary<TKey, TValue>()
+		public static ObservableDictionary<TKey, TValue> Dictionary<TKey, TValue>(
+			[CallerFilePath] string callerFile = null,
+			[CallerLineNumber] int callerLine = 0)
 		{
-			return new Internal.ObservableDictionary<TKey, TValue>();
+			var d = new Internal.ObservableDictionary<TKey, TValue>();
+			d.callerFile = callerFile;
+			d.callerLine = callerLine;
+			return d;
 		}
 
 		// TODO: Dictionary with initial value

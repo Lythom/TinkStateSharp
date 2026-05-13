@@ -96,6 +96,30 @@ namespace TinkState.Internal
 					break;
 			}
 		}
+
+		public override string ToString()
+		{
+			if (data == null) return "Binding<" + typeof(T).Name + ">(disposed)";
+
+			var sb = new System.Text.StringBuilder();
+			sb.Append("Binding<").Append(typeof(T).Name).Append("> data=").Append(data.DebugName);
+
+			if (data is AutoObservable<T> auto)
+			{
+				var srcs = auto.LastTriggerSources;
+				if (srcs.Length > 0)
+				{
+					sb.Append(" triggers=[");
+					for (var i = 0; i < srcs.Length; i++)
+					{
+						if (i > 0) sb.Append(", ");
+						sb.Append(srcs[i].DebugName);
+					}
+					sb.Append(']');
+				}
+			}
+			return sb.ToString();
+		}
 	}
 
 	class CombinedComparer<T> : IEqualityComparer<T>

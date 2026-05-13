@@ -57,8 +57,10 @@ namespace TinkState.Internal
 
 	}
 
+	[System.Diagnostics.DebuggerDisplay("Auto {DebugName,nq} = {last}")]
 	class AutoObservable<T> : Dispatcher, Observable<T>, Derived, Observer, DispatchingObservable<T>
 	{
+		// Used by [DebuggerDisplay]. See AutoObservable<T>.DebugDisplay below.
 		enum Status
 		{
 			Fresh,
@@ -73,6 +75,31 @@ namespace TinkState.Internal
 		readonly Dictionary<DispatchingObservable, Subscription> dependencies = new Dictionary<DispatchingObservable, Subscription>();
 		Status status;
 		T last;
+
+		// buffer réutilisé : 1 seule alloc à vie, agrandi si besoin
+		DispatchingObservable[] lastTriggerBuffer;
+		int lastTriggerCount;
+
+		public ReadOnlySpan<DispatchingObservable> LastTriggerSources
+			=> lastTriggerBuffer == null
+				? ReadOnlySpan<DispatchingObservable>.Empty
+				: new ReadOnlySpan<DispatchingObservable>(lastTriggerBuffer, 0, lastTriggerCount);
+
+		public string Name;
+		internal string callerFile;
+		internal int callerLine;
+
+		public string DebugName
+		{
+			get
+			{
+				if (Name != null) return Name;
+				if (callerFile == null) return "Auto<" + typeof(T).Name + ">";
+				return System.IO.Path.GetFileNameWithoutExtension(callerFile) + ":" + callerLine;
+			}
+		}
+
+		public override string ToString() => "Auto<" + typeof(T).Name + "> " + DebugName;
 
 		#region subscription linking
 		Subscription subscriptionsHead;
@@ -114,6 +141,7 @@ namespace TinkState.Internal
 			this.comparer = comparer ?? EqualityComparer<T>.Default;
 			status = Status.Fresh;
 		}
+
 
 		public IDisposable Bind(Action<T> callback, IEqualityComparer<T> comparer = null, Scheduler scheduler = null)
 		{
@@ -159,7 +187,27 @@ namespace TinkState.Internal
 				{
 					// check if any subscriptions has changed and only recompute if so
 					var valid = true;
+					if (TinkState.Observable.DebugTrackTriggers)
 					{
+						// mode debug : on ne break pas, on collecte toutes les subs changées
+						lastTriggerCount = 0;
+						var s = subscriptionsHead;
+						while (s != null)
+						{
+							if (s.HasChanged())
+							{
+								valid = false;
+								if (lastTriggerBuffer == null) lastTriggerBuffer = new DispatchingObservable[4];
+								else if (lastTriggerCount == lastTriggerBuffer.Length)
+									System.Array.Resize(ref lastTriggerBuffer, lastTriggerBuffer.Length * 2);
+								lastTriggerBuffer[lastTriggerCount++] = s.GetSource();
+							}
+							s = s.Next;
+						}
+					}
+					else
+					{
+						// mode prod : comportement original (early-break, zéro alloc)
 						var s = subscriptionsHead;
 						while (s != null)
 						{
@@ -173,6 +221,7 @@ namespace TinkState.Internal
 							s = s.Next;
 						}
 					}
+
 					if (valid)
 					{
 						status = Status.Computed;

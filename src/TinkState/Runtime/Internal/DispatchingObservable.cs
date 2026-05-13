@@ -4,6 +4,7 @@ namespace TinkState.Internal
 {
 	interface DispatchingObservable
 	{
+		string DebugName { get; }
 		long GetRevision();
 		bool CanFire();
 		void Subscribe(Observer observer);

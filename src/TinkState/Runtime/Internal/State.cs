@@ -4,10 +4,27 @@ using System.Diagnostics;
 
 namespace TinkState.Internal
 {
+	[System.Diagnostics.DebuggerDisplay("State {DebugName,nq} = {value}")]
 	class State<T> : Dispatcher, TinkState.State<T>, DispatchingObservable<T>
 	{
 		readonly IEqualityComparer<T> comparer;
 		T value;
+		public string Name;
+		internal string callerFile;
+		internal int callerLine;
+
+		public string DebugName
+		{
+			get
+			{
+				if (Name != null) return Name;
+				if (callerFile == null) return "State<" + typeof(T).Name + ">";
+				// alloc uniquement à la lecture (catch / watcher) — pas en hot path
+				return System.IO.Path.GetFileNameWithoutExtension(callerFile) + ":" + callerLine;
+			}
+		}
+
+		public override string ToString() => "State<" + typeof(T).Name + "> " + DebugName + " = " + value;
 
 		public State(T value, IEqualityComparer<T> comparer)
 		{

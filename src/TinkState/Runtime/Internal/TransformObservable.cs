@@ -18,6 +18,8 @@ namespace TinkState.Internal
 			this.comparer = comparer ?? EqualityComparer<TOut>.Default;
 		}
 
+		public string DebugName => source.DebugName + ".Map()";
+
 		public long GetRevision()
 		{
 			return source.GetRevision();

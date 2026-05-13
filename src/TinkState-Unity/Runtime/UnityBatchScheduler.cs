@@ -58,7 +58,7 @@ namespace TinkState
 					}
 					catch (Exception e)
 					{
-						Debug.LogException(e);
+						Debug.LogException(new Exception("[TinkState] " + o + " failed: " + e.Message, e));
 					}
 				}
 				currentQueue.Clear();

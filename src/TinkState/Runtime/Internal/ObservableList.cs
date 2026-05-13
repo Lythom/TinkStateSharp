@@ -8,6 +8,10 @@ namespace TinkState.Internal
 		readonly List<T> entries;
 		bool valid = false;
 
+		public string Name;
+		internal string callerFile;
+		internal int callerLine;
+
 		public T this[int index]
 		{
 			get
@@ -41,6 +45,16 @@ namespace TinkState.Internal
 		public ObservableList(IEnumerable<T> initial)
 		{
 			entries = new List<T>(initial);
+		}
+
+		public string DebugName
+		{
+			get
+			{
+				if (Name != null) return Name;
+				if (callerFile == null) return "ObservableList<" + typeof(T).Name + ">";
+				return System.IO.Path.GetFileNameWithoutExtension(callerFile) + ":" + callerLine;
+			}
 		}
 
 		public void Add(T item)
