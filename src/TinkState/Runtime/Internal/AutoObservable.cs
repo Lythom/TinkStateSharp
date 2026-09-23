@@ -29,30 +29,49 @@ namespace TinkState.Internal
 			}
 		}
 
+		// The finally blocks restore the tracking context when a computation throws: left set, it would
+		// track every later read, anywhere, into the failed observable.
+
 		public static R Untracked<R>(DispatchingObservable<R> o)
 		{
 			var before = Current;
 			Current = null;
-			var ret = o.GetCurrentValue();
-			Current = before;
-			return ret;
+			try
+			{
+				return o.GetCurrentValue();
+			}
+			finally
+			{
+				Current = before;
+			}
 		}
 
 		public static R ComputeFor<R>(Derived o, Computation<R> computation)
 		{
 			var before = Current;
 			Current = o;
-			var ret = computation.GetNext();
-			Current = before;
-			return ret;
+			try
+			{
+				return computation.GetNext();
+			}
+			finally
+			{
+				Current = before;
+			}
 		}
 
 		public static void ComputeFor<TStateMachine>(Derived o, in TStateMachine stateMachine) where TStateMachine : IAsyncStateMachine
 		{
 			var before = Current;
 			Current = o;
-			stateMachine.MoveNext();
-			Current = before;
+			try
+			{
+				stateMachine.MoveNext();
+			}
+			finally
+			{
+				Current = before;
+			}
 		}
 
 	}

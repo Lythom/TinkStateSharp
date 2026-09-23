@@ -71,12 +71,23 @@ namespace TinkState.Internal
 			if (observers.Count == 0) return;
 
 			firing = true;
-			foreach (var observer in observers)
+			try
 			{
-				observer.Notify();
+				foreach (var observer in observers)
+				{
+					observer.Notify();
+				}
 			}
-			firing = false;
+			finally
+			{
+				// An observer that throws must not leave later subscriptions deferred until the next Fire.
+				firing = false;
+				ApplyModifications();
+			}
+		}
 
+		void ApplyModifications()
+		{
 			if (modifications != null)
 			{
 				foreach (var (observer, remove) in modifications)
