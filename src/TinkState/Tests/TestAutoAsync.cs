@@ -15,7 +15,7 @@ namespace Test
 		{
 			var calcCalls = 0;
 			var state = Observable.State(1);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				return state.Value * 2;
@@ -50,7 +50,7 @@ namespace Test
 		{
 			var calcCalls = 0;
 			var state = Observable.State(true);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				if (state.Value) throw new Exception("foobar");
@@ -101,7 +101,7 @@ namespace Test
 
 			var calcCalls = 0;
 			var state = Observable.State(1);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				return await syncAsync(state.Value);
@@ -142,7 +142,7 @@ namespace Test
 
 			var calcCalls = 0;
 			var state = Observable.State(true);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				return await syncAsync(state.Value);
@@ -188,7 +188,7 @@ namespace Test
 			var calcCalls = 0;
 			var stateA = Observable.State(1);
 			var stateB = Observable.State(2);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				var a = stateA.Value;
@@ -234,7 +234,7 @@ namespace Test
 			var calcCalls = 0;
 			var stateA = Observable.State(1);
 			var stateB = Observable.State(2);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				var a = stateA.Value;
@@ -310,7 +310,7 @@ namespace Test
 			var calcCalls = 0;
 			var stateA = Observable.State(1);
 			var stateB = Observable.State(true);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				var a = stateA.Value;
@@ -358,7 +358,7 @@ namespace Test
 			var calcCalls = 0;
 			var stateA = Observable.State(1);
 			var stateB = Observable.State(false);
-			var obs = Observable.Auto(async () =>
+			var obs = Observable.Auto<int>(async () =>
 			{
 				calcCalls++;
 				var a = stateA.Value;
@@ -437,7 +437,7 @@ namespace Test
 			// where a binding should be disposed if its observable will never fire anymore after the last recomputation
 			var s = Observable.State(10);
 			var track = true;
-			var o = Observable.Auto(async () =>
+			var o = Observable.Auto<int>(async () =>
 			{
 				await Task.Delay(10);
 				if (track) return s.Value + 1;
@@ -486,7 +486,7 @@ namespace Test
 			// where a binding should be disposed if its observable will never fire anymore after the last recomputation
 			var s = Observable.State(10);
 			var track = true;
-			var o = Observable.Auto(async () =>
+			var o = Observable.Auto<int>(async () =>
 			{
 				if (track) return s.Value + 1;
 				else return 42;
@@ -516,7 +516,7 @@ namespace Test
 		{
 			var s = Observable.State(1);
 			var computeCalls = 0;
-			var o = Observable.Auto(async () =>
+			var o = Observable.Auto<int>(async () =>
 			{
 				computeCalls++;
 				var v = s.Value;
@@ -646,7 +646,7 @@ namespace Test
 		public async Task TestMapAsync()
 		{
 			var s = Observable.State(1);
-			var o = Observable.Auto(async () =>
+			var o = Observable.Auto<int>(async () =>
 			{
 				var v = s.Value;
 				await Task.Delay(10);
