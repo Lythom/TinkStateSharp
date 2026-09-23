@@ -37,4 +37,37 @@ namespace TinkState.Internal
 		{
 		}
 	}
+
+	// The computation behind AutoRun: each run yields a new count, so every run triggers the binding.
+	// One object in place of a closure, its delegate and a SyncComputation.
+	sealed class AutoRunComputation : Computation<long>
+	{
+		readonly Action action;
+		long runs;
+
+		public AutoRunComputation(Action action)
+		{
+			this.action = action;
+		}
+
+		public long GetNext()
+		{
+			runs++;
+			action();
+			return runs;
+		}
+
+		public bool IsPending()
+		{
+			return false;
+		}
+
+		public void Sleep()
+		{
+		}
+
+		public void Wakeup()
+		{
+		}
+	}
 }

@@ -226,14 +226,11 @@ namespace TinkState
 			[CallerFilePath] string callerFile = null,
 			[CallerLineNumber] int callerLine = 0)
 		{
-			// TODO: a smarter implementation? support for cancellation from within action? async auto-runs?
-			long counter = 0;
-			var observable = Auto(name, () =>
-			{
-				counter++;
-				action();
-				return counter;
-			}, null, callerFile, callerLine);
+			// TODO: support for cancellation from within action? async auto-runs?
+			var observable = new AutoObservable<long>(new AutoRunComputation(action), null);
+			observable.Name = name;
+			observable.callerFile = callerFile;
+			observable.callerLine = callerLine;
 			return observable.Bind(_ => { }, null, scheduler);
 		}
 
