@@ -247,6 +247,50 @@ namespace Test
 		}
 
 		[Test]
+		public void TestManyDependencies()
+		{
+			// enough sources to go past the point where dependencies get indexed, then back under it
+			var sources = new State<int>[20];
+			for (var i = 0; i < sources.Length; i++) sources[i] = Observable.State(i);
+			var count = Observable.State(sources.Length);
+
+			var computeCalls = 0;
+			var o = Observable.Auto(() =>
+			{
+				computeCalls++;
+				var sum = 0;
+				for (var i = 0; i < count.Value; i++) sum += sources[i].Value + sources[i].Value;
+				return sum;
+			});
+
+			var bindingCalls = 0;
+			var binding = o.Bind(_ => bindingCalls++);
+			Assert.That(o.Value, Is.EqualTo(380));
+
+			sources[15].Value = 100;
+			Assert.That(o.Value, Is.EqualTo(550));
+			Assert.That(computeCalls, Is.EqualTo(2));
+
+			count.Value = 3;
+			Assert.That(o.Value, Is.EqualTo(6));
+			Assert.That(computeCalls, Is.EqualTo(3));
+
+			// the sources past the third are no longer tracked
+			sources[15].Value = 0;
+			Assert.That(computeCalls, Is.EqualTo(3));
+
+			sources[1].Value = 11;
+			Assert.That(o.Value, Is.EqualTo(26));
+			Assert.That(computeCalls, Is.EqualTo(4));
+
+			count.Value = 20;
+			Assert.That(o.Value, Is.EqualTo(370));
+			Assert.That(bindingCalls, Is.EqualTo(5));
+
+			binding.Dispose();
+		}
+
+		[Test]
 		public void TestChangesWhileComputing()
 		{
 			// a compute function that changes source observables...

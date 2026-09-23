@@ -69,10 +69,15 @@ namespace TinkState.Internal
 			Computing,
 		}
 
+		// Past this many dependencies, finding the subscription of a source goes through an index
+		// instead of a walk of the subscription list. Most computations read a handful of observables.
+		const int DependencyIndexThreshold = 8;
+
 		readonly IEqualityComparer<T> comparer;
 		readonly Computation<T> computation;
 		bool isSubscribedTo;
-		readonly Dictionary<DispatchingObservable, Subscription> dependencies = new Dictionary<DispatchingObservable, Subscription>();
+		int subscriptionCount;
+		Dictionary<DispatchingObservable, Subscription> dependencyIndex;
 		Status status;
 		T last;
 
@@ -120,6 +125,17 @@ namespace TinkState.Internal
 				sub.Prev = subscriptionsTail;
 				subscriptionsTail = sub;
 			}
+
+			subscriptionCount++;
+			if (dependencyIndex != null)
+			{
+				dependencyIndex[sub.GetSource()] = sub;
+			}
+			else if (subscriptionCount > DependencyIndexThreshold)
+			{
+				dependencyIndex = new Dictionary<DispatchingObservable, Subscription>(subscriptionCount * 2);
+				for (var s = subscriptionsHead; s != null; s = s.Next) dependencyIndex[s.GetSource()] = s;
+			}
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -131,7 +147,21 @@ namespace TinkState.Internal
 			if (sub.Next != null) sub.Next.Prev = sub.Prev;
 			var next = sub.Next;
 			sub.Next = sub.Prev = null;
+
+			subscriptionCount--;
+			dependencyIndex?.Remove(sub.GetSource());
 			return next;
+		}
+
+		Subscription FindSubscription(DispatchingObservable source)
+		{
+			if (dependencyIndex != null) return dependencyIndex.TryGetValue(source, out var indexed) ? indexed : null;
+
+			for (var s = subscriptionsHead; s != null; s = s.Next)
+			{
+				if (s.GetSource() == source) return s;
+			}
+			return null;
 		}
 		#endregion
 
@@ -264,9 +294,7 @@ namespace TinkState.Internal
 			{
 				if (!s.Used)
 				{
-					var source = s.GetSource();
-					dependencies.Remove(source);
-					if (isSubscribedTo) source.Unsubscribe(this);
+					if (isSubscribedTo) s.GetSource().Unsubscribe(this);
 					s = RemoveSubscription(s);
 				}
 				else
@@ -364,12 +392,12 @@ namespace TinkState.Internal
 
 		public R SubscribeTo<R>(DispatchingObservable<R> source)
 		{
-			if (!dependencies.TryGetValue(source, out var v))
+			var v = FindSubscription(source);
+			if (v == null)
 			{
 				// not yet tracking - create a subscription and add a dependency
 				var sub = new Subscription<R>(source);
 				if (isSubscribedTo) source.Subscribe(this);
-				dependencies[source] = sub;
 				AddSubscription(sub);
 				return sub.Last;
 			}
