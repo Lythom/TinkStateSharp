@@ -26,21 +26,26 @@ namespace TinkState.Internal
 		public AsyncComputeTask<T> Task => new AsyncComputeTask<T>(this);
 		public Action MoveNext { get; }
 
-		readonly TStateMachine stateMachine;
+		// Mutable: in release builds the state machine is a struct that advances in place.
+		TStateMachine stateMachine;
 		readonly Derived owner;
 		Action callback;
 		AsyncComputeResult<T> result;
 
-		public AsyncComputeRunner(ref TStateMachine stateMachine, Derived owner)
+		public AsyncComputeRunner(Derived owner)
 		{
 			MoveNext = DoMoveNext; // allocate closure right away to prevent cache checks later
-			this.stateMachine = stateMachine;
 			this.owner = owner;
+		}
+
+		public void Capture(ref TStateMachine stateMachine)
+		{
+			this.stateMachine = stateMachine;
 		}
 
 		void DoMoveNext()
 		{
-			AutoObservable.ComputeFor(owner, stateMachine);
+			AutoObservable.ComputeFor(owner, ref stateMachine);
 		}
 
 		public void SetResult(T result)
@@ -151,16 +156,28 @@ namespace TinkState.Internal
 			where TAwaiter : INotifyCompletion
 			where TStateMachine : IAsyncStateMachine
 		{
-			runner ??= new AsyncComputeRunner<TStateMachine, T>(ref stateMachine, AutoObservable.Current);
-			awaiter.OnCompleted(runner.MoveNext);
+			awaiter.OnCompleted(GetRunner(ref stateMachine).MoveNext);
 		}
 
 		public void AwaitUnsafeOnCompleted<TAwaiter, TStateMachine>(ref TAwaiter awaiter, ref TStateMachine stateMachine)
 			where TAwaiter : ICriticalNotifyCompletion
 			where TStateMachine : IAsyncStateMachine
 		{
-			runner ??= new AsyncComputeRunner<TStateMachine, T>(ref stateMachine, AutoObservable.Current);
-			awaiter.UnsafeOnCompleted(runner.MoveNext);
+			awaiter.UnsafeOnCompleted(GetRunner(ref stateMachine).MoveNext);
+		}
+
+		AsyncComputeRunner<T> GetRunner<TStateMachine>(ref TStateMachine stateMachine)
+			where TStateMachine : IAsyncStateMachine
+		{
+			if (runner != null) return runner;
+
+			// This builder lives inside the state machine. In release builds the state machine is a struct,
+			// so the runner is assigned before the copy: the copy that keeps running must know its runner,
+			// or its result never reaches the observable.
+			var newRunner = new AsyncComputeRunner<TStateMachine, T>(AutoObservable.Current);
+			runner = newRunner;
+			newRunner.Capture(ref stateMachine);
+			return newRunner;
 		}
 	}
 

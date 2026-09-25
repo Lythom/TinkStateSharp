@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using TinkState;
+using TinkState.Internal;
 
 #pragma warning disable CS1998
 
@@ -695,6 +697,69 @@ namespace Test
 			Assert.That(o2.Value.Exception, Is.Not.Null);
 			Assert.That(o2.Value.Exception.Message, Is.EqualTo("Fail"));
 			Assert.That(transformCalls, Is.EqualTo(6));
+		}
+
+		[Test]
+		public async Task TestStructStateMachine()
+		{
+			var input = new TaskCompletionSource<int>();
+			var obs = Observable.Auto<int>(() => DoublingStateMachine.Run(input.Task));
+
+			Assert.That(obs.Value.Status, Is.EqualTo(AsyncComputeStatus.Loading));
+
+			input.SetResult(21);
+			await Task.Delay(50);
+
+			Assert.That(obs.Value.Status, Is.EqualTo(AsyncComputeStatus.Done));
+			Assert.That(obs.Value.Result, Is.EqualTo(42));
+		}
+
+		/// <summary>
+		/// The struct state machine the compiler emits for an async lambda in release builds, written
+		/// by hand: debug builds emit a class, so the other async tests only cover the struct case when
+		/// run in Release.
+		/// </summary>
+		struct DoublingStateMachine : IAsyncStateMachine
+		{
+			AsyncComputeTaskBuilder<int> builder;
+			Task<int> input;
+			TaskAwaiter<int> awaiter;
+			int state;
+
+			public static AsyncComputeTask<int> Run(Task<int> input)
+			{
+				var stateMachine = new DoublingStateMachine { builder = AsyncComputeTaskBuilder<int>.Create(), input = input };
+				stateMachine.builder.Start(ref stateMachine);
+				return stateMachine.builder.Task;
+			}
+
+			public void MoveNext()
+			{
+				try
+				{
+					if (state == 0)
+					{
+						awaiter = input.GetAwaiter();
+						if (!awaiter.IsCompleted)
+						{
+							state = 1;
+							builder.AwaitUnsafeOnCompleted(ref awaiter, ref this);
+							return;
+						}
+					}
+
+					var value = awaiter.GetResult();
+					state = -1;
+					builder.SetResult(value * 2);
+				}
+				catch (Exception exception)
+				{
+					state = -1;
+					builder.SetException(exception);
+				}
+			}
+
+			public void SetStateMachine(IAsyncStateMachine stateMachine) { }
 		}
 	}
 }

@@ -60,7 +60,9 @@ namespace TinkState.Internal
 			}
 		}
 
-		public static void ComputeFor<TStateMachine>(Derived o, in TStateMachine stateMachine) where TStateMachine : IAsyncStateMachine
+		// Passed by ref so that a struct state machine advances in place. Through an in parameter,
+		// MoveNext would run on a defensive copy.
+		public static void ComputeFor<TStateMachine>(Derived o, ref TStateMachine stateMachine) where TStateMachine : IAsyncStateMachine
 		{
 			var before = Current;
 			Current = o;
