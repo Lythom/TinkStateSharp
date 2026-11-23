@@ -159,8 +159,10 @@ namespace TinkState.Internal
 			return revision;
 		}
 
+		// Observe().Value reads the entries through this method: the next change must fire.
 		public ObservableDictionary<TKey, TValue> GetCurrentValue()
 		{
+			valid = true;
 			return this;
 		}
 

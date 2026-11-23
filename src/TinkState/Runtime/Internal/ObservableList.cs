@@ -141,8 +141,10 @@ namespace TinkState.Internal
 			}
 		}
 
+		// Observe().Value reads the entries through this method: the next change must fire.
 		public ObservableList<T> GetCurrentValue()
 		{
+			valid = true;
 			return this;
 		}
 

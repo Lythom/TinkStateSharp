@@ -178,6 +178,19 @@ namespace Test
 
 
 		[Test]
+		public void TestFirstChangeReachesAutoOverObserve()
+		{
+			var list = Observable.List<int>();
+			var hasItems = Observable.Auto(() => list.Observe().Value.Count > 0);
+			var values = new List<bool>();
+			hasItems.Bind(values.Add);
+
+			list.Add(1);
+
+			Assert.That(values, Is.EqualTo(new[] { false, true }));
+		}
+
+		[Test]
 		public void TestObserveAndListUsedInAuto()
 		{
 			var list = Observable.List<string>();

@@ -222,6 +222,19 @@ namespace Test
 		}
 
 		[Test]
+		public void TestFirstChangeReachesAutoOverObserve()
+		{
+			var dict = Observable.Dictionary<int, string>();
+			var hasItems = Observable.Auto(() => dict.Observe().Value.Count > 0);
+			var values = new List<bool>();
+			hasItems.Bind(values.Add);
+
+			dict[1] = "a";
+
+			Assert.That(values, Is.EqualTo(new[] { false, true }));
+		}
+
+		[Test]
 		public void TestObserveAndDictionaryUsedInAuto()
 		{
 			var dict = Observable.Dictionary<int, string>();
